@@ -189,7 +189,7 @@ func createRegisterMessage() *messaging_api.FlexMessage {
         "action": {
           "type": "uri",
           "label": "ลงทะเบียน",
-          "uri": "https://line.me/"
+          "uri": "https://line.sornchaithedev.com"
         }
       }
     ],
@@ -210,7 +210,6 @@ func createRegisterMessage() *messaging_api.FlexMessage {
 
 func (app *LineService) handleLarnMessage(text string, replyToken string) error {
 	res, err := GetLarn(text)
-
 	if err != nil {
 		log.Fatal(err)
 	}
