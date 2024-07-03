@@ -87,9 +87,10 @@ func (app *LineService) Callback(c *gin.Context) {
 					ReplyToken: e.ReplyToken,
 					Messages: []messaging_api.MessageInterface{
 						&messaging_api.TextMessage{
-							Text: constants.WELCOME_MESSAGE,
+							Text:       constants.WELCOME_MESSAGE,
+							QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
 						},
-						createRegisterMessage(),
+						// createRegisterMessage(),
 					},
 				},
 			); err != nil {
@@ -206,7 +207,8 @@ func (app *LineService) handleLarnMessage(text string, replyToken string) error 
 			ReplyToken: replyToken,
 			Messages: []messaging_api.MessageInterface{
 				messaging_api.TextMessage{
-					Text: res.Response,
+					Text:       res.Response,
+					QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
 				},
 			},
 		},
