@@ -204,7 +204,7 @@ func createRegisterMessage() *messaging_api.FlexMessage {
 	return &messaging_api.FlexMessage{
 		AltText:    "ลงทะเบียนเพื่อเริ่มต้นใช้งาน หลานเอง",
 		Contents:   contents,
-		QuickReply: createQuickReply([]string{"hello"}),
+		QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
 	}
 }
 
