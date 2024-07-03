@@ -138,7 +138,7 @@ func createQuickReply(messages []string) *messaging_api.QuickReply {
 	for _, message := range messages {
 		items = append(items, messaging_api.QuickReplyItem{
 			Action: &messaging_api.MessageAction{
-				Label: string([]rune(message)[:22]),
+				Label: string([]rune(message)[:20]),
 				Text:  message,
 			},
 		},
