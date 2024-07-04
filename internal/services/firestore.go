@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log"
+	"os"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go"
@@ -11,7 +12,7 @@ import (
 
 func NewFirestore() (*firestore.Client, error) {
 	ctx := context.Background()
-	opt := option.WithCredentialsFile("./serviceAccount.json")
+	opt := option.WithCredentialsJSON([]byte(os.Getenv("SERVICE_ACCOUNT")))
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return nil, err
