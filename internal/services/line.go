@@ -69,12 +69,20 @@ func (app *LineService) Callback(c *gin.Context) {
 						},
 					})
 				default:
-					app.handleLarnMessage(message.Text, e.ReplyToken)
-				}
-				switch s := e.Source.(type) {
-				case webhook.UserSource:
-					if !utils.Has(users, s.UserId) {
-						users = append(users, s.UserId)
+
+					switch s := e.Source.(type) {
+					case webhook.UserSource:
+
+						app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
+							ChatId:         s.UserId,
+							LoadingSeconds: 60,
+						})
+
+						if !utils.Has(users, s.UserId) {
+							users = append(users, s.UserId)
+						}
+
+						app.handleLarnMessage(message.Text, e.ReplyToken)
 					}
 				}
 
