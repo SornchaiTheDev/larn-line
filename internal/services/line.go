@@ -1,20 +1,28 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"larn-line/internal/constants"
+	"larn-line/internal/models"
 	"larn-line/internal/utils"
 	"log"
 
+	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type LineService struct {
 	bot           *messaging_api.MessagingApiAPI
 	channelSecret string
 	channelToken  string
+	firestore     *firestore.Client
 }
 
 func NewLineService(channelSecret string, channelToken string) (*LineService, error) {
@@ -27,10 +35,16 @@ func NewLineService(channelSecret string, channelToken string) (*LineService, er
 		return nil, err
 	}
 
+	firestore, err := NewFirestore()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &LineService{
 		bot,
 		channelSecret,
 		channelToken,
+		firestore,
 	}, nil
 }
 
@@ -69,10 +83,8 @@ func (app *LineService) Callback(c *gin.Context) {
 						},
 					})
 				default:
-
 					switch s := e.Source.(type) {
 					case webhook.UserSource:
-
 						app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
 							ChatId:         s.UserId,
 							LoadingSeconds: 60,
@@ -82,7 +94,7 @@ func (app *LineService) Callback(c *gin.Context) {
 							users = append(users, s.UserId)
 						}
 
-						app.handleLarnMessage(message.Text, e.ReplyToken)
+						app.handleLarnMessage(s.UserId, message.Text, e.ReplyToken)
 					}
 				}
 
@@ -90,32 +102,56 @@ func (app *LineService) Callback(c *gin.Context) {
 				log.Printf("Unsupported message content: %T\n", e.Message)
 			}
 		case webhook.FollowEvent:
+			switch s := e.Source.(type) {
+			case webhook.UserSource:
+				app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
+					ChatId:         s.UserId,
+					LoadingSeconds: 60,
+				})
+
+				if !utils.Has(users, s.UserId) {
+					users = append(users, s.UserId)
+				}
+
+				app.createUserIfNotExist(s.UserId)
+			}
+
+			quickReply := utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
+
 			if _, err := app.bot.ReplyMessage(
 				&messaging_api.ReplyMessageRequest{
 					ReplyToken: e.ReplyToken,
 					Messages: []messaging_api.MessageInterface{
 						&messaging_api.TextMessage{
 							Text:       constants.WELCOME_MESSAGE,
-							QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
+							QuickReply: quickReply,
 						},
 
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_1,
-							QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
+							QuickReply: quickReply,
 						},
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_2,
-							QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
+							QuickReply: quickReply,
 						},
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_3,
-							QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
+							QuickReply: quickReply,
 						},
-						// createRegisterMessage(),
 					},
 				},
 			); err != nil {
 				log.Fatal(err)
+			}
+
+		case webhook.UnfollowEvent:
+			ctx := context.Background()
+
+			switch s := e.Source.(type) {
+			case webhook.UserSource:
+				app.firestore.Collection("users").Doc(s.UserId).Delete(ctx)
+				utils.DeleteCollection(app.firestore, fmt.Sprintf("users/%s/messages", s.UserId))
 			}
 
 		default:
@@ -139,88 +175,60 @@ func (app *LineService) sendMessages(replyToken string, messages []messaging_api
 	}
 }
 
-func createQuickReply(messages []string) *messaging_api.QuickReply {
+func (app *LineService) createUserIfNotExist(userId string) {
+	ctx := context.Background()
+	userDoc := app.firestore.Collection("users").Doc(userId)
 
-	items := make([]messaging_api.QuickReplyItem, 0)
-
-	for _, message := range messages {
-		items = append(items, messaging_api.QuickReplyItem{
-			Action: &messaging_api.MessageAction{
-				Label: string([]rune(message)[:20]),
-				Text:  message,
-			},
-		},
-		)
+	_, err := userDoc.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			updateUserAgent(userDoc, ctx, &map[string]any{
+				"currentAgent": nil,
+			})
+		}
 	}
 
-	return &messaging_api.QuickReply{
-		Items: items,
-	}
 }
 
-func createRegisterMessage() *messaging_api.FlexMessage {
-	jsonString := `{
-  "type": "bubble",
-  "hero": {
-    "type": "image",
-    "size": "full",
-    "aspectRatio": "16:9",
-    "aspectMode": "cover",
-    "url": "https://f.ptcdn.info/055/074/000/qvs14fduxLyta6ie2Uo-o.jpg"
-  },
-  "body": {
-    "type": "box",
-    "layout": "vertical",
-    "contents": [
-      {
-        "type": "text",
-        "text": "ยินดีต้อนรับ",
-        "weight": "bold",
-        "size": "xl"
-      },
-      {
-        "type": "text",
-        "text": "กดปุ่มลงทะเบียนด้านล่างเพื่อเริ่มต้นใช้งาน",
-        "wrap": true
-      }
-    ]
-  },
-  "footer": {
-    "type": "box",
-    "layout": "vertical",
-    "spacing": "sm",
-    "contents": [
-      {
-        "type": "button",
-        "style": "primary",
-        "height": "sm",
-        "action": {
-          "type": "uri",
-          "label": "ลงทะเบียน",
-          "uri": "https://line.sornchaithedev.com"
-        }
-      }
-    ],
-    "flex": 0
-  }
-}`
-	contents, err := messaging_api.UnmarshalFlexContainer([]byte(jsonString))
+func (app *LineService) handleLarnMessage(userId string, text string, replyToken string) error {
+
+	ctx := context.Background()
+
+	userDoc := app.firestore.Collection("users").Doc(userId)
+
+	histories := getUserHistory(userDoc, ctx)
+
+	res, err := GetLarn(text, histories)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &messaging_api.FlexMessage{
-		AltText:    "ลงทะเบียนเพื่อเริ่มต้นใช้งาน หลานเอง",
-		Contents:   contents,
-		QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
-	}
-}
+	c := make(chan *models.Message)
 
-func (app *LineService) handleLarnMessage(text string, replyToken string) error {
-	res, err := GetLarn(text)
-	if err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+
+		message := <-c
+
+		user, err := userDoc.Get(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if u := user.Data(); u["currentAgent"] != message.Classification {
+			updateUserAgent(userDoc, ctx,
+				&map[string]interface{}{
+					"currentAgent": message.Classification,
+				},
+			)
+			utils.DeleteCollection(app.firestore, fmt.Sprintf("users/%s/messages", userId))
+		}
+
+		sendMessage(userDoc, ctx, text)
+		sendMessage(userDoc, ctx, message.Response)
+
+	}()
+
+	c <- res
 
 	if _, err = app.bot.ReplyMessage(
 		&messaging_api.ReplyMessageRequest{
@@ -228,7 +236,7 @@ func (app *LineService) handleLarnMessage(text string, replyToken string) error 
 			Messages: []messaging_api.MessageInterface{
 				messaging_api.TextMessage{
 					Text:       res.Response,
-					QuickReply: createQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
+					QuickReply: utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
 				},
 			},
 		},
@@ -240,44 +248,46 @@ func (app *LineService) handleLarnMessage(text string, replyToken string) error 
 	return nil
 }
 
-// func handleQuickReply(replyToken string) error {
-// 	msg := &messaging_api.TextMessage{
-// 		Text: "Select your favorite food category or send me your location!",
-// 		QuickReply: &messaging_api.QuickReply{
-// 			Items: []messaging_api.QuickReplyItem{
-// 				{
-// 					Action: &messaging_api.MessageAction{
-// 						Label: "Sushi",
-// 						Text:  "Sushi",
-// 					},
-// 				},
-// 				{
-// 					Action: &messaging_api.MessageAction{
-// 						Label: "Tempura",
-// 						Text:  "Tempura",
-// 					},
-// 				},
-// 				{
-// 					Action: &messaging_api.LocationAction{
-// 						Label: "Send location",
-// 					},
-// 				},
-// 				{
-// 					Action: &messaging_api.UriAction{
-// 						Label: "LINE Developer",
-// 						Uri:   "https://developers.line.biz/",
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-// 	if _, err := app.bot.ReplyMessage(
-// 		&messaging_api.ReplyMessageRequest{
-// 			ReplyToken: replyToken,
-// 			Messages:   []messaging_api.MessageInterface{msg},
-// 		},
-// 	); err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
+func getUserHistory(userDoc *firestore.DocumentRef, ctx context.Context) []models.History {
+
+	iter := userDoc.Collection("messages").Documents(ctx)
+
+	histories := make([]models.History, 0)
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var history models.History
+		if err := doc.DataTo(&history); err != nil {
+			log.Fatal(err)
+		}
+
+		histories = append(histories, history)
+	}
+
+	return histories
+}
+
+func updateUserAgent(userDoc *firestore.DocumentRef, ctx context.Context, body *map[string]any) {
+	_, err := userDoc.Set(ctx, body)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func sendMessage(userDoc *firestore.DocumentRef, ctx context.Context, message string) {
+	_, _, err := userDoc.Collection("messages").Add(ctx, map[string]any{
+		"from":      "user",
+		"message":   message,
+		"timestamp": firestore.ServerTimestamp,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}

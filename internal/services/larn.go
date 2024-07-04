@@ -10,9 +10,10 @@ import (
 	"os"
 )
 
-func GetLarn(message string) (*models.Message, error) {
-	payload := map[string]string{
+func GetLarn(message string, history []models.History) (*models.Message, error) {
+	payload := map[string]any{
 		"message": message,
+		"history": history,
 	}
 
 	marshalled, err := json.Marshal(payload)
