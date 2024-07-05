@@ -223,8 +223,8 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 			utils.DeleteCollection(app.firestore, fmt.Sprintf("users/%s/messages", userId))
 		}
 
-		sendMessage(userDoc, ctx, text)
-		sendMessage(userDoc, ctx, message.Response)
+		sendMessage(userDoc, ctx, text, "user")
+		sendMessage(userDoc, ctx, message.Response, "model")
 
 	}()
 
@@ -281,9 +281,9 @@ func updateUserAgent(userDoc *firestore.DocumentRef, ctx context.Context, body *
 	}
 }
 
-func sendMessage(userDoc *firestore.DocumentRef, ctx context.Context, message string) {
+func sendMessage(userDoc *firestore.DocumentRef, ctx context.Context, message string, from string) {
 	_, _, err := userDoc.Collection("messages").Add(ctx, map[string]any{
-		"from":      "user",
+		"from":      from,
 		"message":   message,
 		"timestamp": firestore.ServerTimestamp,
 	})
