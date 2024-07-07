@@ -159,6 +159,7 @@ func (app *LineService) Callback(c *gin.Context) {
 			case webhook.UserSource:
 				app.firestore.Collection("users").Doc(s.UserId).Delete(ctx)
 				utils.DeleteCollection(app.firestore, fmt.Sprintf("users/%s/messages", s.UserId))
+				utils.DeleteCollection(app.firestore, fmt.Sprintf("users/%s/tmp_messages", s.UserId))
 			}
 
 		default:
