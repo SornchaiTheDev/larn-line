@@ -1,7 +1,6 @@
 package main
 
 import (
-	"larn-line/internal/api"
 	"larn-line/internal/services"
 	"log"
 	"os"
@@ -20,10 +19,6 @@ func main() {
 			"status": "ok",
 		})
 	})
-
-	r.GET("/verify", api.VerifyPhoneNumber)
-
-	r.GET("/authorize", api.GetAuthorizationCode)
 
 	app, err := services.NewLineService(
 		os.Getenv("LINE_CHANNEL_SECRET"),
