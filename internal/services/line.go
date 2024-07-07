@@ -8,6 +8,7 @@ import (
 	"larn-line/internal/models"
 	"larn-line/internal/utils"
 	"log"
+	"strings"
 
 	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
@@ -69,22 +70,28 @@ func (app *LineService) Callback(c *gin.Context) {
 	for _, event := range cb.Events {
 		switch e := event.(type) {
 		case webhook.MessageEvent:
-			switch message := e.Message.(type) {
-			case webhook.TextMessageContent:
-				switch message.Text {
-				case constants.NEWS_CHECK:
-					app.sendMessages(e.ReplyToken, []messaging_api.MessageInterface{
-						&messaging_api.TextMessage{
-							Text: constants.NEWS_CHECK_MESSAGE,
-						},
-						&messaging_api.VideoMessage{
-							OriginalContentUrl: "https://storage.googleapis.com/smooth-brain-bucket/ShareChat.mov",
-							PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/Untitled%20design.png",
-						},
-					})
-				default:
-					switch s := e.Source.(type) {
-					case webhook.UserSource:
+			switch s := e.Source.(type) {
+			case webhook.UserSource:
+				switch message := e.Message.(type) {
+				case webhook.TextMessageContent:
+					switch message.Text {
+					case constants.NEWS_CHECK:
+						app.sendMessages(e.ReplyToken, []messaging_api.MessageInterface{
+							&messaging_api.TextMessage{
+								Text: constants.NEWS_CHECK_MESSAGE,
+							},
+							&messaging_api.VideoMessage{
+								OriginalContentUrl: "https://storage.googleapis.com/smooth-brain-bucket/ShareChat.mov",
+								PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/Untitled%20design.png",
+							},
+						})
+					case constants.CALL_LARN:
+						app.sendMessages(e.ReplyToken, []messaging_api.MessageInterface{
+							utils.CreateCallLarnMessage(),
+						})
+					case constants.READ_MORE:
+						app.sendTmpMessages(s.UserId, e.ReplyToken)
+					default:
 						app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
 							ChatId:         s.UserId,
 							LoadingSeconds: 60,
@@ -116,7 +123,7 @@ func (app *LineService) Callback(c *gin.Context) {
 				app.createUserIfNotExist(s.UserId)
 			}
 
-			quickReply := utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
+			quickReply := utils.CreateQuickReply([]string{"โทรหาหลาน", "เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
 
 			if _, err := app.bot.ReplyMessage(
 				&messaging_api.ReplyMessageRequest{
@@ -230,15 +237,82 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 
 	c <- res
 
+	splitMessages := strings.Split(res.Response, "% % % % %")
+
+	allMessages := make([]messaging_api.MessageInterface, 0)
+
+	quickReply := utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
+
+	currentMessage := 0
+	for _, message := range splitMessages {
+
+		imgIdx := utils.IndexOf(message, '[')
+
+		if imgIdx == -1 {
+			allMessages = append(allMessages,
+				messaging_api.TextMessage{
+					Text:       strings.TrimSpace(message),
+					QuickReply: quickReply,
+				},
+			)
+			currentMessage++
+		} else {
+
+			imagePart := message[imgIdx:]
+
+			endOfImg := imgIdx + utils.IndexOf(imagePart, ']')
+
+			image := message[imgIdx+1 : endOfImg]
+
+			allMessages = append(allMessages,
+				messaging_api.TextMessage{
+					Text:       strings.TrimSpace(message[:imgIdx]),
+					QuickReply: quickReply,
+				},
+				messaging_api.ImageMessage{
+					OriginalContentUrl: image,
+					PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/resize.jpg",
+					QuickReply:         quickReply,
+				},
+			)
+
+			currentMessage += 2
+		}
+
+	}
+
+	messagesLength := len(allMessages)
+	var finalMessages []messaging_api.MessageInterface
+
+	if messagesLength <= 5 {
+		finalMessages = allMessages
+	} else {
+		tmpMessages := allMessages[5:]
+		quickReply = utils.CreateQuickReply([]string{"อ่านต่อ"})
+		saveTmpMessage(userDoc, ctx, tmpMessages)
+
+		for i, message := range allMessages[:5] {
+
+			switch m := message.(type) {
+			case messaging_api.TextMessage:
+				if i == 4 {
+					m.QuickReply = quickReply
+				}
+				finalMessages = append(finalMessages, m)
+			case messaging_api.ImageMessage:
+				if i == 4 {
+					m.QuickReply = quickReply
+				}
+				finalMessages = append(finalMessages, m)
+			}
+
+		}
+	}
+
 	if _, err = app.bot.ReplyMessage(
 		&messaging_api.ReplyMessageRequest{
 			ReplyToken: replyToken,
-			Messages: []messaging_api.MessageInterface{
-				messaging_api.TextMessage{
-					Text:       res.Response,
-					QuickReply: utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"}),
-				},
-			},
+			Messages:   finalMessages,
 		},
 	); err != nil {
 		log.Print(err)
@@ -289,5 +363,111 @@ func sendMessage(userDoc *firestore.DocumentRef, ctx context.Context, message st
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func saveTmpMessage(userDoc *firestore.DocumentRef, ctx context.Context, messages []messaging_api.MessageInterface) {
+	var payload map[string]any
+	for _, message := range messages {
+		switch m := message.(type) {
+		case messaging_api.TextMessage:
+			payload = map[string]any{
+				"type":      "message",
+				"text":      m.Text,
+				"timestamp": firestore.ServerTimestamp,
+			}
+		case messaging_api.ImageMessage:
+			payload = map[string]any{
+				"type":      "image",
+				"original":  m.OriginalContentUrl,
+				"preview":   m.PreviewImageUrl,
+				"timestamp": firestore.ServerTimestamp,
+			}
+		}
+
+		_, _, err := userDoc.Collection("tmp_messages").Add(ctx, payload)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func getTmpMessages(userDoc *firestore.DocumentRef, ctx context.Context) []models.TmpHistory {
+
+	iter := userDoc.Collection("tmp_messages").OrderBy("timestamp", firestore.Asc).Limit(5).Documents(ctx)
+
+	histories := make([]models.TmpHistory, 0)
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var history models.TmpHistory
+
+		m := doc.Data()
+
+		switch m["type"].(string) {
+		case "message":
+			history = models.TmpHistory{
+				Message: models.TextMessage{
+					Text: m["text"].(string),
+				},
+			}
+		case "image":
+			history = models.TmpHistory{
+				Message: models.ImageMessage{
+					Preview:  m["preview"].(string),
+					Original: m["original"].(string),
+				},
+			}
+		}
+
+		_, err = userDoc.Collection("tmp_messages").Doc(doc.Ref.ID).Delete(ctx)
+		if err != nil {
+			log.Println(err)
+		}
+
+		histories = append(histories, history)
+	}
+
+	return histories
+}
+
+func (app *LineService) sendTmpMessages(userId string, replyToken string) {
+	userDoc := app.firestore.Collection("users").Doc(userId)
+	ctx := context.Background()
+
+	histories := getTmpMessages(userDoc, ctx)
+
+	var allMessages []messaging_api.MessageInterface
+	for _, history := range histories {
+
+		switch h := history.Message.(type) {
+		case models.TextMessage:
+			allMessages = append(allMessages, &messaging_api.TextMessage{
+				Text: h.GetText(),
+			})
+		case models.ImageMessage:
+			allMessages = append(allMessages, &messaging_api.ImageMessage{
+				PreviewImageUrl:    h.GetPreview(),
+				OriginalContentUrl: h.GetOriginal(),
+			})
+		}
+	}
+
+	if _, err := app.bot.ReplyMessage(
+		&messaging_api.ReplyMessageRequest{
+			ReplyToken: replyToken,
+			Messages:   allMessages,
+		},
+	); err != nil {
+		log.Print(err)
+	} else {
+		log.Println("Sent text reply.")
 	}
 }
