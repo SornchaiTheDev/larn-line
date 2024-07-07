@@ -11,7 +11,7 @@ func CreateQuickReply(messages []string) *messaging_api.QuickReply {
 	items := make([]messaging_api.QuickReplyItem, 0)
 
 	for _, message := range messages {
-		msgLen := len([]rune(message))
+		msgLen := len([]rune(string(message)))
 
 		if msgLen > 300 {
 			msgLen = 300
