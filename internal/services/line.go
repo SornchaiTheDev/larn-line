@@ -211,6 +211,10 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 		log.Fatal(err)
 	}
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	c := make(chan *models.Message)
 
 	go func() {
@@ -242,7 +246,9 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 
 	allMessages := make([]messaging_api.MessageInterface, 0)
 
-	quickReply := utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
+	recommends, err := GetRecommend(res.Response)
+
+	quickReply := utils.CreateQuickReply(recommends)
 
 	currentMessage := 0
 	for _, message := range splitMessages {

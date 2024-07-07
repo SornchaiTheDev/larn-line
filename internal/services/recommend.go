@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"larn-line/internal/models"
 	"log"
 	"net/http"
 	"os"
 )
 
-func GetLarn(message string, history []models.History) (*models.Message, error) {
+func GetRecommend(message string) ([]string, error) {
+
 	payload := map[string]any{
 		"message": message,
-		"history": history,
 	}
 
 	marshalled, err := json.Marshal(payload)
@@ -22,7 +21,7 @@ func GetLarn(message string, history []models.History) (*models.Message, error) 
 		log.Fatal("Cannot marshal json message")
 	}
 
-	url := os.Getenv("LARN_API_URL") + "/ai/message"
+	url := os.Getenv("LARN_API_URL") + "/ai/recommend"
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(marshalled))
 
@@ -48,14 +47,25 @@ func GetLarn(message string, history []models.History) (*models.Message, error) 
 		log.Fatal(err)
 	}
 
-	var response models.Message
+	type Response struct {
+		Response []string `json:"response"`
+	}
 
-	err = json.Unmarshal(body, &response)
+	var apiRes Response
+
+	err = json.Unmarshal(body, &apiRes)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	var finalRecommends []string
 
+	for _, recommend := range apiRes.Response {
+		if len(recommend) != 0 {
+			finalRecommends = append(finalRecommends, recommend)
+		}
+	}
+
+	return finalRecommends, nil
 }
