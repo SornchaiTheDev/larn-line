@@ -1,6 +1,10 @@
 package utils
 
-import "github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
+import (
+	"strings"
+
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
+)
 
 func CreateQuickReply(messages []string) *messaging_api.QuickReply {
 
@@ -12,6 +16,8 @@ func CreateQuickReply(messages []string) *messaging_api.QuickReply {
 		if msgLen > 300 {
 			msgLen = 300
 		}
+
+		message = strings.ReplaceAll(message, "\"", "")
 
 		items = append(items, messaging_api.QuickReplyItem{
 			Action: &messaging_api.MessageAction{
