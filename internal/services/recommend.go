@@ -61,7 +61,11 @@ func GetRecommend(message string) ([]string, error) {
 
 	var finalRecommends []string
 
-	for _, recommend := range apiRes.Response {
+	for i, recommend := range apiRes.Response {
+		if i > 12 {
+			break
+		}
+
 		if len(recommend) != 0 {
 			finalRecommends = append(finalRecommends, recommend)
 		}

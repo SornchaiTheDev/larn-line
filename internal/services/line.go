@@ -24,6 +24,7 @@ type LineService struct {
 	channelSecret string
 	channelToken  string
 	firestore     *firestore.Client
+	quickReplies  *messaging_api.QuickReply
 }
 
 func NewLineService(channelSecret string, channelToken string) (*LineService, error) {
@@ -41,15 +42,16 @@ func NewLineService(channelSecret string, channelToken string) (*LineService, er
 		log.Fatal(err)
 	}
 
+	quickReply := utils.CreateQuickReply([]string{"เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
+
 	return &LineService{
 		bot,
 		channelSecret,
 		channelToken,
 		firestore,
+		quickReply,
 	}, nil
 }
-
-var users []string
 
 func (app *LineService) Callback(c *gin.Context) {
 
@@ -72,39 +74,23 @@ func (app *LineService) Callback(c *gin.Context) {
 		case webhook.MessageEvent:
 			switch s := e.Source.(type) {
 			case webhook.UserSource:
+				app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
+					ChatId:         s.UserId,
+					LoadingSeconds: 60,
+				})
 				switch message := e.Message.(type) {
 				case webhook.TextMessageContent:
 					switch message.Text {
 					case constants.NEWS_CHECK:
-						app.sendMessages(e.ReplyToken, []messaging_api.MessageInterface{
-							&messaging_api.TextMessage{
-								Text: constants.NEWS_CHECK_MESSAGE,
-							},
-							&messaging_api.VideoMessage{
-								OriginalContentUrl: "https://storage.googleapis.com/smooth-brain-bucket/ShareChat.mov",
-								PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/Untitled%20design.png",
-							},
-						})
-					case constants.CALL_LARN:
-						app.sendMessages(e.ReplyToken, []messaging_api.MessageInterface{
-							utils.CreateCallLarnMessage(),
-						})
+						app.sendNewsTut(e.ReplyToken)
 					case constants.READ_MORE:
 						app.sendTmpMessages(s.UserId, e.ReplyToken)
 					default:
-						app.bot.ShowLoadingAnimation(&messaging_api.ShowLoadingAnimationRequest{
-							ChatId:         s.UserId,
-							LoadingSeconds: 60,
-						})
-
-						if !utils.Has(users, s.UserId) {
-							users = append(users, s.UserId)
-						}
-
 						app.handleLarnMessage(s.UserId, message.Text, e.ReplyToken)
 					}
+				default:
+					log.Printf("Unsupported message content: %T\n", e.Message)
 				}
-
 			default:
 				log.Printf("Unsupported message content: %T\n", e.Message)
 			}
@@ -116,14 +102,8 @@ func (app *LineService) Callback(c *gin.Context) {
 					LoadingSeconds: 60,
 				})
 
-				if !utils.Has(users, s.UserId) {
-					users = append(users, s.UserId)
-				}
-
 				app.createUserIfNotExist(s.UserId)
 			}
-
-			quickReply := utils.CreateQuickReply([]string{"โทรหาหลาน", "เพิ่มขนาดตัวอักษร", "ตั้งค่าการแจ้งเตือนให้มีเสียงดังขึ้น", "วิธีถ่ายภาพหน้าจอ", "จะส่งรูปภาพทางไลน์", "วิธีตั้งนาฬิกาปลุก", "เชื่อม WiFi กับโทรศัพท์", "ลบแอปพลิเคชัน", "เปิดใช้งานโหมดประหยัดแบตเตอรี่"})
 
 			if _, err := app.bot.ReplyMessage(
 				&messaging_api.ReplyMessageRequest{
@@ -131,20 +111,20 @@ func (app *LineService) Callback(c *gin.Context) {
 					Messages: []messaging_api.MessageInterface{
 						&messaging_api.TextMessage{
 							Text:       constants.WELCOME_MESSAGE,
-							QuickReply: quickReply,
+							QuickReply: app.quickReplies,
 						},
 
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_1,
-							QuickReply: quickReply,
+							QuickReply: app.quickReplies,
 						},
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_2,
-							QuickReply: quickReply,
+							QuickReply: app.quickReplies,
 						},
 						&messaging_api.TextMessage{
 							Text:       constants.EXAMPLE_MESSAGE_3,
-							QuickReply: quickReply,
+							QuickReply: app.quickReplies,
 						},
 					},
 				},
@@ -169,7 +149,18 @@ func (app *LineService) Callback(c *gin.Context) {
 
 }
 
-func (app *LineService) sendMessages(replyToken string, messages []messaging_api.MessageInterface) {
+func (app *LineService) sendNewsTut(replyToken string) {
+	messages := []messaging_api.MessageInterface{
+		&messaging_api.TextMessage{
+			Text:       constants.NEWS_CHECK_MESSAGE,
+			QuickReply: app.quickReplies,
+		},
+		&messaging_api.VideoMessage{
+			OriginalContentUrl: "https://storage.googleapis.com/smooth-brain-bucket/ShareChat.mov",
+			PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/Untitled%20design.png",
+			QuickReply:         app.quickReplies,
+		},
+	}
 
 	if _, err := app.bot.ReplyMessage(
 		&messaging_api.ReplyMessageRequest{
@@ -256,13 +247,16 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 		imgIdx := utils.IndexOf(message, '[')
 
 		if imgIdx == -1 {
-			allMessages = append(allMessages,
-				messaging_api.TextMessage{
-					Text:       strings.TrimSpace(message),
-					QuickReply: quickReply,
-				},
-			)
-			currentMessage++
+			text := strings.TrimSpace(message)
+			if len(text) != 0 {
+				allMessages = append(allMessages,
+					messaging_api.TextMessage{
+						Text:       text,
+						QuickReply: quickReply,
+					},
+				)
+				currentMessage++
+			}
 		} else {
 
 			imagePart := message[imgIdx:]
@@ -271,16 +265,19 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 
 			image := message[imgIdx+1 : endOfImg]
 
-			allMessages = append(allMessages,
-				messaging_api.TextMessage{
-					Text:       strings.TrimSpace(message[:imgIdx]),
-					QuickReply: quickReply,
-				},
-			)
+			text := strings.TrimSpace(message[:imgIdx])
+			if len(text) > 0 {
 
-			currentMessage++
+				allMessages = append(allMessages,
+					messaging_api.TextMessage{
+						Text:       text,
+						QuickReply: quickReply,
+					},
+				)
+				currentMessage++
+			}
 
-			if image != "NO_PHOTO" {
+			if strings.HasPrefix(image, "https://") {
 				allMessages = append(allMessages,
 					messaging_api.ImageMessage{
 						OriginalContentUrl: image,
@@ -301,11 +298,10 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 		finalMessages = allMessages
 	} else {
 		tmpMessages := allMessages[5:]
-		quickReply = utils.CreateQuickReply([]string{"อ่านต่อ"})
 		saveTmpMessage(userDoc, ctx, tmpMessages)
+		quickReply = utils.CreateQuickReply([]string{"อ่านต่อ"})
 
 		for i, message := range allMessages[:5] {
-
 			switch m := message.(type) {
 			case messaging_api.TextMessage:
 				if i == 4 {
@@ -459,7 +455,6 @@ func (app *LineService) sendTmpMessages(userId string, replyToken string) {
 
 	var allMessages []messaging_api.MessageInterface
 	for _, history := range histories {
-
 		switch h := history.Message.(type) {
 		case models.TextMessage:
 			allMessages = append(allMessages, &messaging_api.TextMessage{
@@ -471,6 +466,15 @@ func (app *LineService) sendTmpMessages(userId string, replyToken string) {
 				OriginalContentUrl: h.GetOriginal(),
 			})
 		}
+
+	}
+
+	if len(allMessages) == 0 {
+		allMessages = append(allMessages, &messaging_api.TextMessage{
+			Text:       "ไม่มีข้อความให้อ่านต่อแล้วค่ะ 🤗",
+			QuickReply: app.quickReplies,
+		})
+		return
 	}
 
 	if _, err := app.bot.ReplyMessage(

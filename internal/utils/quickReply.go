@@ -7,10 +7,16 @@ func CreateQuickReply(messages []string) *messaging_api.QuickReply {
 	items := make([]messaging_api.QuickReplyItem, 0)
 
 	for _, message := range messages {
+		msgLen := len([]rune(message))
+
+		if msgLen > 300 {
+			msgLen = 300
+		}
+
 		items = append(items, messaging_api.QuickReplyItem{
 			Action: &messaging_api.MessageAction{
-				Label: string([]rune(message)[:20]),
-				Text:  message,
+				Label: string([]rune(message)[:17]) + "...",
+				Text:  string([]rune(message)[:msgLen]),
 			},
 		},
 		)
