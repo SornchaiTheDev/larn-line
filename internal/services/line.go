@@ -269,14 +269,20 @@ func (app *LineService) handleLarnMessage(userId string, text string, replyToken
 					Text:       strings.TrimSpace(message[:imgIdx]),
 					QuickReply: quickReply,
 				},
-				messaging_api.ImageMessage{
-					OriginalContentUrl: image,
-					PreviewImageUrl:    "https://storage.googleapis.com/smooth-brain-bucket/resize.jpg",
-					QuickReply:         quickReply,
-				},
 			)
 
-			currentMessage += 2
+			currentMessage++
+
+			if image != "NO_PHOTO" {
+				allMessages = append(allMessages,
+					messaging_api.ImageMessage{
+						OriginalContentUrl: image,
+						PreviewImageUrl:    image,
+						QuickReply:         quickReply,
+					},
+				)
+				currentMessage++
+			}
 		}
 
 	}
